@@ -1,5 +1,8 @@
 USE feedbacks_db;
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 CREATE OR REPLACE VIEW vw_ranking_produtos AS
 SELECT
   p.id_produto,

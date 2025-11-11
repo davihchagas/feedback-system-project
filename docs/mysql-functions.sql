@@ -1,5 +1,8 @@
 USE feedbacks_db;
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 DELIMITER $$
 
 CREATE FUNCTION fn_gerar_id_usuario()

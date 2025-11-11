@@ -1,5 +1,8 @@
 USE feedbacks_db;
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 CREATE TABLE grupos_usuarios (
   id_grupo VARCHAR(20) PRIMARY KEY,
   nome_grupo VARCHAR(20) NOT NULL UNIQUE
