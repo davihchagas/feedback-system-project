@@ -1,5 +1,6 @@
 import { mysqlPool } from "../config/mysql.js";
 import { FeedbackTexto } from "../models/FeedbackTexto.js";
+import { logAction } from "../utils/audit.js";
 
 /**
  * POST /api/feedbacks
@@ -7,63 +8,52 @@ import { FeedbackTexto } from "../models/FeedbackTexto.js";
  */
 export async function criarFeedback(req, res) {
   try {
-    const {
-      id_produto,
-      nota,
-      comentario_curto,
-      comentario_completo,
-      tags = [],
-      sentimento = null,
-    } = req.body;
+    const { id_cliente, id_produto, nota, comentario_curto, comentario_completo, tags = [] } = req.body;
 
-    const idUsuario = req.user?.id_usuario;
-    const [rowsCliente] = await mysqlPool.query(
-      "SELECT id_cliente FROM clientes WHERE id_usuario = ? LIMIT 1",
-      [idUsuario]
+    // 1) MySQL: insere feedback e captura o ID gerado pela SP
+    const [resultSets] = await mysqlPool.query(
+      "CALL sp_inserir_feedback(?,?,?,?)",
+      [id_cliente, id_produto, Number(nota), comentario_curto]
     );
-    if (!rowsCliente.length) {
-      return res
-        .status(400)
-        .json({
-          message: "Cliente não encontrado para o usuário autenticado.",
-        });
-    }
-    const idCliente = rowsCliente[0].id_cliente;
+    // mysql2 para CALL retorna: [ [rows], [fields], ... ]
+    const newId = resultSets?.[0]?.[0]?.id_feedback;
 
-    const [procResult] = await mysqlPool.query(
-      "CALL sp_inserir_feedback(?, ?, ?, ?)",
-      [idCliente, id_produto, nota, comentario_curto]
+    if (!newId) {
+      return res.status(500).json({ message: "Falha ao gerar id_feedback." });
+    }
+
+    // 2) MongoDB: texto completo
+    const db = getMongoDb();
+    await db.collection("feedbacktextos").updateOne(
+      { id_feedback: newId },
+      {
+        $set: {
+          id_feedback: newId,
+          comentario_completo: comentario_completo || null,
+          tags: Array.isArray(tags) ? tags : [],
+          criado_em: new Date(),
+        },
+      },
+      { upsert: true }
     );
 
-    let idFeedbackGerado = null;
-    try {
-      idFeedbackGerado = procResult?.[0]?.[0]?.id_feedback || null;
-    } catch (_) {
-      idFeedbackGerado = null;
-    }
-    if (!idFeedbackGerado) {
-      const [lastFb] = await mysqlPool.query(
-        "SELECT id_feedback FROM feedbacks WHERE id_cliente = ? AND id_produto = ? ORDER BY data_feedback DESC LIMIT 1",
-        [idCliente, id_produto]
-      );
-      if (lastFb.length) idFeedbackGerado = lastFb[0].id_feedback;
-    }
+    // 3) Audit: CLIENTE_FEEDBACK_CRIADO
+    await logAction({
+      action: "CLIENTE_FEEDBACK_CRIADO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "feedback", id: newId },
+      context: { id_produto },
+    });
 
-    if (idFeedbackGerado && comentario_completo) {
-      await FeedbackTexto.create({
-        id_feedback: idFeedbackGerado,
-        comentario_completo,
-        tags,
-        sentimento,
-      });
-    }
-
-    return res
-      .status(201)
-      .json({ message: "Feedback registrado", id_feedback: idFeedbackGerado });
-  } catch (err) {
-    console.error("Falha ao criar feedback:", err);
-    return res.status(500).json({ message: "Erro ao registrar feedback." });
+    return res.status(201).json({ id_feedback: newId });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: "Erro ao criar feedback." });
   }
 }
 
@@ -133,18 +123,160 @@ export async function listarFeedbacksDetalhados(req, res) {
  */
 export async function responderFeedback(req, res) {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // id_feedback
     const { texto_resposta } = req.body;
-    const idUsuario = req.user?.id_usuario;
 
     await mysqlPool.query(
-      "INSERT INTO respostas_feedback (id_feedback, id_usuario_analista, texto_resposta, data_resposta) VALUES (?, ?, ?, NOW())",
-      [id, idUsuario, texto_resposta]
+      "INSERT INTO respostas_feedback (id_feedback, id_usuario_analista, texto_resposta, data_resposta) VALUES (?,?,?,NOW())",
+      [id, req.user.id_usuario, texto_resposta]
     );
 
-    return res.status(201).json({ message: "Resposta registrada" });
+    // Audit: ANALISTA_FEEDBACK_RESPONDIDO
+    await logAction({
+      action: "ANALISTA_FEEDBACK_RESPONDIDO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "feedback", id },
+    });
+
+    return res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: "Erro ao responder feedback." });
+  }
+}
+
+// Lista somente os feedbacks do usuário autenticado (CLIENTE)
+export async function listarMeusFeedbacks(req, res) {
+  try {
+    const idUsuario = req.user?.id_usuario;
+
+    // Resolve o id_cliente vinculado ao usuário
+    const [rowsCliente] = await mysqlPool.query(
+      "SELECT id_cliente FROM clientes WHERE id_usuario = ? LIMIT 1",
+      [idUsuario]
+    );
+    if (!rowsCliente.length) {
+      return res.json([]); // sem vínculo -> lista vazia
+    }
+    const idCliente = rowsCliente[0].id_cliente;
+
+    // Busca direto nas tabelas (sem depender da view)
+    const [rows] = await mysqlPool.query(
+      `
+      SELECT
+        f.id_feedback,
+        f.id_produto,
+        p.nome_produto,
+        f.nota,
+        fn_classificar_nota(f.nota) AS classificacao,
+        f.comentario_curto,
+        f.data_feedback
+      FROM feedbacks f
+      JOIN produtos p ON p.id_produto = f.id_produto
+      WHERE f.id_cliente = ?
+      ORDER BY f.data_feedback DESC
+      `,
+      [idCliente]
+    );
+
+    return res.json(rows);
   } catch (err) {
-    console.error("Falha ao responder feedback:", err);
-    return res.status(500).json({ message: "Erro ao registrar resposta." });
+    console.error("Falha ao listar meus feedbacks:", err);
+    return res.status(500).json({ message: "Erro ao listar seus feedbacks." });
+  }
+}
+
+// Lista respostas do analista para os feedbacks do cliente autenticado
+export async function listarMinhasRespostas(req, res) {
+  try {
+    const idUsuario = req.user?.id_usuario;
+
+    // descobrir id_cliente desse usuário
+    const [rowsCli] = await mysqlPool.query(
+      "SELECT id_cliente FROM clientes WHERE id_usuario = ? LIMIT 1",
+      [idUsuario]
+    );
+    if (!rowsCli.length) return res.json([]);
+
+    const idCliente = rowsCli[0].id_cliente;
+
+    // respostas ligadas aos feedbacks desse cliente
+    const [rows] = await mysqlPool.query(
+      `
+      SELECT
+        r.id_resposta,
+        r.id_feedback,
+        r.texto_resposta,
+        r.data_resposta,
+        u.nome AS nome_analista,
+        p.nome_produto,
+        f.nota,
+        f.comentario_curto
+      FROM respostas_feedback r
+      JOIN feedbacks f ON f.id_feedback = r.id_feedback
+      JOIN usuarios u ON u.id_usuario = r.id_usuario_analista
+      JOIN produtos p ON p.id_produto = f.id_produto
+      WHERE f.id_cliente = ?
+      ORDER BY r.data_resposta DESC
+      `,
+      [idCliente]
+    );
+
+    return res.json(rows);
+  } catch (err) {
+    console.error("Falha ao listar minhas respostas:", err);
+    return res.status(500).json({ message: "Erro ao listar respostas." });
+  }
+}
+
+// ANALISTA vê apenas as próprias respostas; ADMIN vê todas.
+export async function listarRespostasAnalista(req, res) {
+  try {
+    const { id_produto } = req.query;
+    const ehAdmin = req.user?.id_grupo === "ADMIN";
+    const idAnalista = req.user?.id_usuario;
+
+    const where = [];
+    const params = [];
+
+    if (!ehAdmin) {
+      where.push("r.id_usuario_analista = ?");
+      params.push(idAnalista);
+    }
+    if (id_produto) {
+      where.push("f.id_produto = ?");
+      params.push(id_produto);
+    }
+
+    const sql = `
+      SELECT
+        r.id_resposta,
+        r.id_feedback,
+        r.texto_resposta,
+        r.data_resposta,
+        u.nome            AS nome_analista,
+        c.nome            AS nome_cliente,
+        p.nome_produto,
+        f.nota,
+        f.comentario_curto
+      FROM respostas_feedback r
+      JOIN feedbacks  f ON f.id_feedback = r.id_feedback
+      JOIN usuarios   u ON u.id_usuario  = r.id_usuario_analista
+      JOIN clientes   c ON c.id_cliente  = f.id_cliente
+      JOIN produtos   p ON p.id_produto  = f.id_produto
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY r.data_resposta DESC
+    `;
+
+    const [rows] = await mysqlPool.query(sql, params);
+    return res.json(rows);
+  } catch (err) {
+    console.error("Falha ao listar respostas (analista):", err);
+    return res.status(500).json({ message: "Erro ao listar respostas." });
   }
 }

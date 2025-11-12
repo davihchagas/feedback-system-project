@@ -3,6 +3,13 @@ USE feedbacks_db;
 SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
+CREATE OR REPLACE VIEW vw_usuarios_clientes AS
+SELECT
+  u.id_usuario, u.nome, u.email, u.ativo, u.id_grupo,
+  c.id_cliente, c.documento
+FROM usuarios u
+LEFT JOIN clientes c ON c.id_usuario = u.id_usuario;
+
 CREATE OR REPLACE VIEW vw_ranking_produtos AS
 SELECT p.id_produto, p.nome_produto, e.media_nota, e.qtd_feedbacks
 FROM estatisticas_produto e
@@ -113,3 +120,80 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+-- feedbacks (id_produto, data_feedback)
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedbacks' AND INDEX_NAME = 'idx_feedbacks_produto_data'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_feedbacks_produto_data ON feedbacks (id_produto, data_feedback)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- feedbacks (id_cliente, data_feedback)
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedbacks' AND INDEX_NAME = 'idx_feedbacks_cliente_data'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_feedbacks_cliente_data ON feedbacks (id_cliente, data_feedback)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- estatisticas_produto (media_nota)
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'estatisticas_produto' AND INDEX_NAME = 'idx_estatisticas_media'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_estatisticas_media ON estatisticas_produto (media_nota)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- usuarios (id_grupo)
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios' AND INDEX_NAME = 'idx_usuarios_grupo'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_usuarios_grupo ON usuarios (id_grupo)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- clientes (id_usuario)
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clientes' AND INDEX_NAME = 'idx_clientes_usuario'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_clientes_usuario ON clientes (id_usuario)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- feedbacks (id_cliente) auxiliar
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedbacks' AND INDEX_NAME = 'idx_feedbacks_cliente'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_feedbacks_cliente ON feedbacks (id_cliente)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- feedbacks (id_produto) auxiliar
+SET @idx_exists := (
+  SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedbacks' AND INDEX_NAME = 'idx_feedbacks_produto'
+);
+SET @sql := IF(@idx_exists = 0,
+  'CREATE INDEX idx_feedbacks_produto ON feedbacks (id_produto)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

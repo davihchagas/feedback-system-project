@@ -9,8 +9,8 @@ import authRoutes from "./routes/authRoutes.js";
 import produtoRoutes from "./routes/produtoRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
 import relatorioRoutes from "./routes/relatorioRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
-import { logAcesso } from "./middlewares/logAcesso.js";
 import { checkAuth } from "./middlewares/checkAuth.js";
 
 dotenv.config();
@@ -27,17 +27,12 @@ app.get("/api/health", (req, res) => {
 // rota de autenticação (sem JWT nem log)
 app.use("/auth", authRoutes);
 
-// a partir daqui: qualquer rota que comece com /api
-// passa por autenticação e registro de log
-app.use("/api", checkAuth, logAcesso);
-
 // rotas protegidas
 app.use("/api/produtos", produtoRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
 app.use("/api/relatorios", relatorioRoutes);
 
-app.use((req, _res, next) => { console.log(req.method, req.originalUrl); next(); });
-
+app.use("/api/admin", adminRoutes);
 
 async function start() {
   try {

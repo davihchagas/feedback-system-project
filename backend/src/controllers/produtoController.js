@@ -1,6 +1,7 @@
 // backend/src/controllers/produtoController.js
 import { mysqlPool } from "../config/mysql.js";
 import { gerarIdProduto } from "../utils/gerarIds.js";
+import { logAction } from "../utils/audit.js";
 
 // Listar produtos
 export async function listarProdutos(req, res) {
@@ -20,7 +21,9 @@ export async function criarProduto(req, res) {
   try {
     const { nome_produto, categoria } = req.body;
     if (!nome_produto) {
-      return res.status(400).json({ message: "Nome do produto é obrigatório." });
+      return res
+        .status(400)
+        .json({ message: "Nome do produto é obrigatório." });
     }
 
     const id_produto = gerarIdProduto();
@@ -28,6 +31,18 @@ export async function criarProduto(req, res) {
       "INSERT INTO produtos (id_produto, nome_produto, categoria, ativo) VALUES (?, ?, ?, 1)",
       [id_produto, nome_produto, categoria || null]
     );
+
+    await logAction({
+      action: "ADMIN_PRODUTO_CRIADO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "produto", id: id_produto },
+      context: { id_produto, nome_produto },
+    });
 
     res.status(201).json({ message: "Produto criado com sucesso", id_produto });
   } catch (error) {
@@ -49,6 +64,21 @@ export async function inativarProduto(req, res) {
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Produto não encontrado." });
     }
+
+    await logAction({
+      action: "ADMIN_PRODUTO_INATIVADO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "produto", id: req.params.id },
+      context: {
+        id_produto: req.params.id,
+        nome_produto: nomeAntes /* se buscar */,
+      },
+    });
 
     res.json({ message: "Produto inativado com sucesso." });
   } catch (error) {

@@ -5,10 +5,16 @@ import {
   obterFeedbackTexto,
   listarFeedbacksDetalhados,
   responderFeedback,
+  listarMeusFeedbacks,
+  listarMinhasRespostas,
+  listarRespostasAnalista,
 } from "../controllers/feedbackController.js";
 
 const router = Router();
 
+router.get("/me", checkRole(["CLIENTE"]), listarMeusFeedbacks);
+router.get("/me/respostas", checkRole(["CLIENTE"]), listarMinhasRespostas);
+router.get("/respostas", checkRole(["ANALISTA", "ADMIN"]), listarRespostasAnalista);
 /**
  * CLIENTE cria feedback
  */
