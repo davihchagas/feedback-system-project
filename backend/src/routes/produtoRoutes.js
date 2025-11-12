@@ -4,7 +4,8 @@ import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import {
   listarProdutos,
-  criarProduto
+  criarProduto,
+  inativarProduto,
 } from "../controllers/produtoController.js";
 
 const router = Router();
@@ -18,11 +19,8 @@ router.get(
 );
 
 // Apenas ADMIN cadastra
-router.post(
-  "/",
-  checkAuth,
-  checkRole(["ADMIN"]),
-  criarProduto
-);
+router.post("/", checkAuth, checkRole(["ADMIN"]), criarProduto);
+
+router.patch("/:id/inativar", checkRole(["ADMIN"]), inativarProduto);
 
 export default router;

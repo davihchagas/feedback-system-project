@@ -1,28 +1,33 @@
-// backend/src/routes/feedbackRoutes.js
 import { Router } from "express";
-import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import {
   criarFeedback,
-  listarFeedbacksDetalhados
+  obterFeedbackTexto,
+  listarFeedbacksDetalhados,
+  responderFeedback,
 } from "../controllers/feedbackController.js";
 
 const router = Router();
 
-// Cliente envia feedback
-router.post(
-  "/",
-  checkAuth,
-  checkRole(["CLIENTE"]),
-  criarFeedback
-);
+/**
+ * CLIENTE cria feedback
+ */
+router.post("/", checkRole(["CLIENTE"]), criarFeedback);
 
-// Analista e Admin consultam feedbacks detalhados
-router.get(
-  "/",
-  checkAuth,
-  checkRole(["ANALISTA", "ADMIN"]),
-  listarFeedbacksDetalhados
-);
+/**
+ * ANALISTA/ADMIN lista feedbacks detalhados pela view + filtros
+ * Ex.: GET /api/feedbacks/detalhados?id_produto=PRD-...&data_inicio=2025-11-01&data_fim=2025-11-30
+ */
+router.get("/detalhados", checkRole(["ANALISTA", "ADMIN"]), listarFeedbacksDetalhados);
+
+/**
+ * Comentário completo em MongoDB
+ */
+router.get("/:id_feedback/texto", checkRole(["ANALISTA", "ADMIN"]), obterFeedbackTexto);
+
+/**
+ * ANALISTA responde um feedback
+ */
+router.post("/:id/respostas", checkRole(["ANALISTA"]), responderFeedback);
 
 export default router;

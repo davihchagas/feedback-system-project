@@ -30,20 +30,15 @@ BEGIN
 END$$
 
 CREATE FUNCTION fn_classificar_nota(p_nota INT)
-RETURNS VARCHAR(20)
+RETURNS VARCHAR(10) CHARACTER SET utf8mb4
 DETERMINISTIC
 BEGIN
-  DECLARE resultado VARCHAR(20);
-  IF p_nota <= 2 THEN
-    SET resultado = 'ruim';
-  ELSEIF p_nota = 3 THEN
-    SET resultado = 'regular';
-  ELSEIF p_nota = 4 THEN
-    SET resultado = 'bom';
-  ELSE
-    SET resultado = 'ótimo';
-  END IF;
-  RETURN resultado;
+  RETURN CASE
+    WHEN p_nota <= 2 THEN 'Ruim'
+    WHEN p_nota = 3 THEN 'Regular'
+    WHEN p_nota = 4 THEN 'Bom'
+    ELSE 'Ótimo'
+  END;
 END$$
 
 DELIMITER ;

@@ -26,19 +26,26 @@ export default function AnalistaPage() {
   }
 
   async function buscarFeedbacks(e) {
-    e.preventDefault();
-    setMensagem("");
+  e.preventDefault();
+  setMensagem("");
+  setSelecionado(null);
+  setTextoCompleto(null);
 
-    const params = {};
-    if (filtros.id_produto) params.id_produto = filtros.id_produto;
-    if (filtros.data_inicio && filtros.data_fim) {
-      params.data_inicio = filtros.data_inicio + " 00:00:00";
-      params.data_fim = filtros.data_fim + " 23:59:59";
-    }
+  try {
+    const params = {
+      id_produto: filtros.id_produto || undefined,
+      data_inicio: filtros.data_inicio || undefined, // YYYY-MM-DD
+      data_fim: filtros.data_fim || undefined,       // YYYY-MM-DD
+      // mantenha nota_min / nota_max se depois adicionar inputs
+    };
 
-    const { data } = await api.get("/api/feedbacks", { params });
+    const { data } = await api.get("/api/feedbacks/detalhados", { params });
     setFeedbacks(data);
+  } catch (err) {
+    console.error(err);
+    setMensagem("Falha ao buscar feedbacks.");
   }
+}
 
   async function verTextoCompleto(f) {
     setSelecionado(f);
@@ -77,10 +84,7 @@ export default function AnalistaPage() {
         <h2 className="text-xl font-semibold">Painel do analista</h2>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-600">{usuario?.nome}</span>
-          <button
-            className="text-sm text-red-600"
-            onClick={logout}
-          >
+          <button className="text-sm text-red-600" onClick={logout}>
             Sair
           </button>
         </div>
@@ -89,7 +93,10 @@ export default function AnalistaPage() {
       <main className="max-w-6xl mx-auto p-6 space-y-6">
         <section className="bg-white p-4 rounded-xl shadow">
           <h3 className="text-lg font-semibold mb-4">Filtros</h3>
-          <form className="grid grid-cols-1 md:grid-cols-4 gap-4" onSubmit={buscarFeedbacks}>
+          <form
+            className="grid grid-cols-1 md:grid-cols-4 gap-4"
+            onSubmit={buscarFeedbacks}
+          >
             <div>
               <label className="block text-sm mb-1">Produto</label>
               <select

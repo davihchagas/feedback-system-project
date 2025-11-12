@@ -4,27 +4,27 @@ SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
 CREATE OR REPLACE VIEW vw_ranking_produtos AS
-SELECT
-  p.id_produto,
-  p.nome_produto,
-  e.media_nota,
-  e.qtd_feedbacks
-FROM produtos p
-JOIN estatisticas_produto e ON e.id_produto = p.id_produto
+SELECT p.id_produto, p.nome_produto, e.media_nota, e.qtd_feedbacks
+FROM estatisticas_produto e
+JOIN produtos p ON p.id_produto = e.id_produto
+WHERE p.ativo = 1
 ORDER BY e.media_nota DESC, e.qtd_feedbacks DESC;
 
 CREATE OR REPLACE VIEW vw_feedbacks_detalhados AS
 SELECT
   f.id_feedback,
   c.nome AS nome_cliente,
+  p.id_produto,
   p.nome_produto,
   f.nota,
   fn_classificar_nota(f.nota) AS classificacao,
   f.comentario_curto,
   f.data_feedback
 FROM feedbacks f
-JOIN clientes c ON c.id_cliente = f.id_cliente
-JOIN produtos p ON p.id_produto = f.id_produto;
+JOIN clientes c   ON c.id_cliente  = f.id_cliente
+JOIN produtos p   ON p.id_produto  = f.id_produto
+ORDER BY f.data_feedback DESC;
+
 
 DELIMITER $$
 

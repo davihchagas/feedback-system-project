@@ -36,13 +36,15 @@ app.use("/api/produtos", produtoRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
 app.use("/api/relatorios", relatorioRoutes);
 
+app.use((req, _res, next) => { console.log(req.method, req.originalUrl); next(); });
+
+
 async function start() {
   try {
     await mysqlPool.getConnection();
     console.log("MySQL conectado");
 
     await connectMongo();
-    console.log("MongoDB conectado");
 
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => {
