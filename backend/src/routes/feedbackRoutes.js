@@ -4,10 +4,11 @@ import { checkRole } from "../middlewares/checkRole.js";
 import {
   criarFeedback,
   obterFeedbackTexto,
-  listarFeedbacksDetalhados,   // precisa existir no controller
+  listarFeedbacksDetalhados, // precisa existir no controller
   responderFeedback,
   listarFeedbacksDoCliente,
   listarRespostasDoCliente,
+  listarRespostasAnalista,
 } from "../controllers/feedbackController.js";
 
 const router = Router();
@@ -21,10 +22,19 @@ router.get("/me", checkRole(["CLIENTE"]), listarFeedbacksDoCliente);
 router.get("/me/respostas", checkRole(["CLIENTE"]), listarRespostasDoCliente);
 
 // ANALISTA/ADMIN
-router.get("/detalhados", checkRole(["ANALISTA", "ADMIN"]), listarFeedbacksDetalhados);
-router.get("/:id_feedback/texto", checkRole(["ANALISTA", "ADMIN"]), obterFeedbackTexto);
+router.get(
+  "/detalhados",
+  checkRole(["ANALISTA", "ADMIN"]),
+  listarFeedbacksDetalhados
+);
+router.get(
+  "/:id_feedback/texto",
+  checkRole(["ANALISTA", "ADMIN"]),
+  obterFeedbackTexto
+);
 
 // ANALISTA
 router.post("/:id/respostas", checkRole(["ANALISTA"]), responderFeedback);
+router.get("/respostas", checkRole(["ANALISTA", "ADMIN"]), listarRespostasAnalista);
 
 export default router;

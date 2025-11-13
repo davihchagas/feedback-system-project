@@ -93,6 +93,9 @@ export default function AnalistaPage() {
     try {
       const params = {
         id_produto: filtroRespostas.id_produto || undefined,
+        data_inicio: filtros.data_inicio || undefined,
+        data_fim: filtros.data_fim || undefined,
+        id_analista: usuario.id_usuario,
       };
       const { data } = await api.get("/api/feedbacks/respostas", { params });
       setRespostas(data);

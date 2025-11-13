@@ -3,16 +3,6 @@ USE feedbacks_db;
 SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS respostas_feedback;
-DROP TABLE IF EXISTS feedbacks;
-DROP TABLE IF EXISTS estatisticas_produto;
-DROP TABLE IF EXISTS clientes;
-DROP TABLE IF EXISTS usuarios;
-DROP TABLE IF EXISTS produtos;
-DROP TABLE IF EXISTS grupos_usuarios;
-SET FOREIGN_KEY_CHECKS = 1;
-
 CREATE TABLE grupos_usuarios (
   id_grupo VARCHAR(20) PRIMARY KEY,
   nome_grupo VARCHAR(20) NOT NULL UNIQUE

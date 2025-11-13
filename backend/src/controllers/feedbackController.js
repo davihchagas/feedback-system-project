@@ -270,3 +270,82 @@ export async function responderFeedback(req, res) {
     return res.status(500).json({ message: "Erro ao registrar resposta" });
   }
 }
+
+export async function listarRespostasAnalista(req, res) {
+  try {
+    const {
+      id_produto,
+      id_cliente,
+      id_analista,
+      data_inicio,
+      data_fim,
+    } = req.query;
+
+    const where = [];
+    const params = [];
+
+    if (id_produto) {
+      where.push("f.id_produto = ?");
+      params.push(id_produto);
+    }
+
+    if (id_cliente) {
+      where.push("f.id_cliente = ?");
+      params.push(id_cliente);
+    }
+
+    if (id_analista) {
+      where.push("r.id_usuario_analista = ?");
+      params.push(id_analista);
+    }
+
+    if (data_inicio) {
+      where.push("r.data_resposta >= ?");
+      params.push(data_inicio + " 00:00:00");
+    }
+
+    if (data_fim) {
+      where.push("r.data_resposta <= ?");
+      params.push(data_fim + " 23:59:59");
+    }
+
+    const sql = `
+      SELECT
+        r.id_resposta,
+        r.texto_resposta,
+        r.data_resposta,
+
+        f.id_feedback,
+        f.nota,
+        f.comentario_curto,
+        f.data_feedback,
+
+        p.id_produto,
+        p.nome_produto,
+
+        c.id_cliente,
+        c.nome AS nome_cliente,
+
+        u.id_usuario AS id_analista,
+        u.nome AS nome_analista,
+        u.email AS email_analista
+      FROM respostas_feedback r
+      JOIN feedbacks f
+        ON f.id_feedback = r.id_feedback
+      JOIN produtos p
+        ON p.id_produto = f.id_produto
+      JOIN clientes c
+        ON c.id_cliente = f.id_cliente
+      JOIN usuarios u
+        ON u.id_usuario = r.id_usuario_analista
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY r.data_resposta DESC
+    `;
+
+    const [rows] = await mysqlPool.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error("Falha ao listar respostas (analista):", err);
+    res.status(500).json({ message: "Erro ao listar respostas." });
+  }
+}
