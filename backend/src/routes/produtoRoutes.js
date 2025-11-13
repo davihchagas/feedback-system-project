@@ -6,6 +6,7 @@ import {
   listarProdutos,
   criarProduto,
   inativarProduto,
+  reativarProduto,
 } from "../controllers/produtoController.js";
 
 const router = Router();
@@ -22,5 +23,7 @@ router.get(
 router.post("/", checkAuth, checkRole(["ADMIN"]), criarProduto);
 
 router.patch("/:id/inativar", checkRole(["ADMIN"]), inativarProduto);
+
+router.patch("/:id/reativar", checkRole(["ADMIN"]), reativarProduto);
 
 export default router;

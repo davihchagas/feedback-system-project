@@ -304,28 +304,30 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {produtos.map((p) => (
-                        <tr key={p.id_produto} className="border-b">
-                          <td className="px-3 py-2">{p.id_produto}</td>
-                          <td className="px-3 py-2">{p.nome_produto}</td>
-                          <td className="px-3 py-2">{p.categoria}</td>
-                          <td className="px-3 py-2">
-                            <button
-                              className="text-xs px-2 py-1 rounded bg-red-100 text-red-700"
-                              onClick={() => inativarProduto(p.id_produto)}
-                            >
-                              Inativar
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {produtos.length === 0 && (
+                      {produtos
+                        .filter((p) => p.ativo)
+                        .map((p) => (
+                          <tr key={p.id_produto} className="border-b">
+                            <td className="px-3 py-2">{p.id_produto}</td>
+                            <td className="px-3 py-2">{p.nome_produto}</td>
+                            <td className="px-3 py-2">{p.categoria}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                className="text-xs px-2 py-1 rounded bg-red-100 text-red-700"
+                                onClick={() => inativarProduto(p.id_produto)}
+                              >
+                                Inativar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      {produtos.filter((p) => p.ativo).length === 0 && (
                         <tr>
                           <td
                             colSpan={4}
                             className="px-3 py-3 text-center text-slate-500"
                           >
-                            Nenhum produto cadastrado.
+                            Nenhum produto ativo.
                           </td>
                         </tr>
                       )}
@@ -473,10 +475,18 @@ export default function AdminPage() {
                         </td>
                         <td className="px-3 py-2">
                           <button
-                            className="text-xs px-2 py-1 rounded bg-red-100 text-red-700"
-                            onClick={() => desativarUsuarioPorId(u.id_usuario)}
+                            className={`text-xs px-2 py-1 rounded ${
+                              u.ativo
+                                ? "bg-red-100 text-red-700"
+                                : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            }`}
+                            onClick={() => {
+                              if (!u.ativo) return; // evita chamar a API se já estiver inativo
+                              desativarUsuarioPorId(u.id_usuario);
+                            }}
+                            disabled={!u.ativo}
                           >
-                            Desativar
+                            {u.ativo ? "Desativar" : "Já inativo"}
                           </button>
                         </td>
                       </tr>

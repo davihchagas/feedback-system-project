@@ -3,8 +3,7 @@ import bcrypt from "bcrypt";
 import { mysqlPool } from "../config/mysql.js";
 import { getMongoDb } from "../config/mongo.js";
 import { gerarIdUsuario, gerarIdCliente } from "../utils/gerarIds.js";
-import { logAction } from "../utils/audit.js";
-import { humanizeLog } from "../utils/audit.js";
+import { logAction, humanizeLog } from "../utils/audit.js";
 
 // -------- Usuários --------
 
@@ -34,6 +33,7 @@ export async function criarUsuario(req, res) {
   if (!nome || !email || !senha || !id_grupo) {
     return res.status(400).json({ message: "Dados obrigatórios ausentes." });
   }
+
   const id_usuario = gerarIdUsuario();
   const senha_hash = await bcrypt.hash(String(senha), 10);
 
@@ -55,12 +55,8 @@ export async function criarUsuario(req, res) {
     }
 
     await conn.commit();
-    res.status(201).json({ id_usuario });
-  } catch (e) {
-    await conn.rollback();
-    console.error("Falha ao criar usuário:", e);
-    res.status(500).json({ message: "Erro ao criar usuário." });
-  } finally {
+
+    // Log da ação somente após sucesso
     await logAction({
       action: "ADMIN_USUARIO_CRIADO",
       actor: {
@@ -74,8 +70,18 @@ export async function criarUsuario(req, res) {
         id_usuario_alvo: id_usuario,
         nome_usuario: nome,
         grupo_alvo: id_grupo,
+        email_alvo: email,
       },
+      path: req.originalUrl,
+      method: req.method,
     });
+
+    res.status(201).json({ id_usuario });
+  } catch (e) {
+    await conn.rollback();
+    console.error("Falha ao criar usuário:", e);
+    res.status(500).json({ message: "Erro ao criar usuário." });
+  } finally {
     conn.release();
   }
 }
@@ -88,13 +94,18 @@ export async function atualizarUsuario(req, res) {
   try {
     await conn.beginTransaction();
 
-    // atualiza dados do usuário
+    // Dados atuais para compor contexto do log
+    const [antesRows] = await conn.query(
+      "SELECT id_usuario, nome, email, id_grupo, ativo FROM usuarios WHERE id_usuario = ?",
+      [id]
+    );
+
     await conn.query(
       "UPDATE usuarios SET nome = COALESCE(?, nome), email = COALESCE(?, email), id_grupo = COALESCE(?, id_grupo), ativo = COALESCE(?, ativo) WHERE id_usuario = ?",
       [nome ?? null, email ?? null, id_grupo ?? null, ativo ?? null, id]
     );
 
-    // se for cliente, manter registro em clientes sincronizado pelo nome/documento
+    // Se for cliente, manter registro em clientes sincronizado
     if (id_grupo === "CLIENTE" || documento) {
       const [rows] = await conn.query(
         "SELECT id_cliente FROM clientes WHERE id_usuario = ?",
@@ -109,6 +120,25 @@ export async function atualizarUsuario(req, res) {
     }
 
     await conn.commit();
+
+    // Log da atualização
+    await logAction({
+      action: "ADMIN_USUARIO_ATUALIZADO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "usuario", id },
+      context: {
+        antes: antesRows?.[0] ?? null,
+        depois: { nome, email, id_grupo, documento, ativo },
+      },
+      path: req.originalUrl,
+      method: req.method,
+    });
+
     res.json({ updated: true });
   } catch (e) {
     await conn.rollback();
@@ -129,22 +159,27 @@ export async function desativarUsuario(req, res) {
     if (!result.affectedRows) {
       return res.status(404).json({ message: "Usuário não encontrado." });
     }
+
+    // Log da desativação
+    await logAction({
+      action: "ADMIN_USUARIO_DESATIVADO",
+      actor: {
+        id_usuario: req.user.id_usuario,
+        nome: req.user.nome,
+        email: req.user.email,
+        id_grupo: req.user.id_grupo,
+      },
+      entity: { type: "usuario", id },
+      context: { id_usuario_alvo: id },
+      path: req.originalUrl,
+      method: req.method,
+    });
+
     res.json({ disabled: true });
   } catch (e) {
     console.error("Falha ao desativar usuário:", e);
     res.status(500).json({ message: "Erro ao desativar usuário." });
   }
-  await logAction({
-    action: "ADMIN_USUARIO_DESATIVADO",
-    actor: {
-      id_usuario: req.user.id_usuario,
-      nome: req.user.nome,
-      email: req.user.email,
-      id_grupo: req.user.id_grupo,
-    },
-    entity: { type: "usuario", id },
-    context: { id_usuario_alvo: id },
-  });
 }
 
 // -------- Clientes e Analistas (atalhos de listagem) --------
@@ -202,16 +237,19 @@ export async function listarFeedbacksAdmin(req, res) {
 
 // -------- Logs (MongoDB) --------
 
+// versão “bruta” (para tabelas paginadas/diagnóstico)
 export async function listarLogsAuditoria(req, res) {
   try {
-    const mongoDb = getMongoDb();
-    const { page = 1, limit = 20, user, path } = req.query;
+    const db = getMongoDb();
+    const { page = 1, limit = 20, id_usuario, path, action } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
-    const q = {};
-    if (user) q["user.id_usuario"] = user;
-    if (path) q["path"] = path;
 
-    const cursor = mongoDb
+    const q = {};
+    if (id_usuario) q["actor.id_usuario"] = id_usuario; // << padronizado
+    if (path) q.path = path;
+    if (action) q.action = action;
+
+    const cursor = db
       .collection("logs_acesso")
       .find(q)
       .sort({ when: -1 })
@@ -219,7 +257,7 @@ export async function listarLogsAuditoria(req, res) {
       .limit(Number(limit));
 
     const docs = await cursor.toArray();
-    const total = await mongoDb.collection("logs_acesso").countDocuments(q);
+    const total = await db.collection("logs_acesso").countDocuments(q);
 
     res.json({
       page: Number(page),
@@ -233,31 +271,36 @@ export async function listarLogsAuditoria(req, res) {
   }
 }
 
+// versão “humanizada” (frases amigáveis)
 export async function listarLogsHuman(req, res) {
   try {
     const db = getMongoDb();
     const {
       page = 1,
       limit = 20,
-      role, // ADMIN | ANALISTA | CLIENTE (opcional)
-      action, // filtro opcional
-      dt_ini, // ISO yyyy-mm-dd ou yyyy-mm-ddTHH:mm
-      dt_fim, // ISO
+      role,     // ADMIN | ANALISTA | CLIENTE (opcional)
+      action,   // ex.: ANALISTA_RESPOSTA_CRIADA
+      dt_ini,   // yyyy-mm-dd(THH:mm opcional)
+      dt_fim,
+      id_usuario, // opcional
     } = req.query;
 
+    // conjunto padrão de ações relevantes
     const allow = [
       "CLIENTE_FEEDBACK_CRIADO",
-      "ANALISTA_FEEDBACK_RESPONDIDO",
+      "ANALISTA_RESPOSTA_CRIADA",
       "ADMIN_PRODUTO_CRIADO",
       "ADMIN_PRODUTO_INATIVADO",
       "ADMIN_USUARIO_CRIADO",
+      "ADMIN_USUARIO_ATUALIZADO",
       "ADMIN_USUARIO_DESATIVADO",
     ];
 
     const q = {};
     if (req.query.all !== "1") q.action = { $in: allow };
     if (role) q["actor.id_grupo"] = role.toUpperCase();
-    if (action) q["action"] = action;
+    if (action) q.action = action;
+    if (id_usuario) q["actor.id_usuario"] = id_usuario;
 
     if (dt_ini || dt_fim) {
       q.when = {};

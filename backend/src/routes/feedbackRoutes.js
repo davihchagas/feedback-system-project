@@ -1,44 +1,30 @@
 import { Router } from "express";
+import { checkAuth } from "../middlewares/checkAuth.js";
 import { checkRole } from "../middlewares/checkRole.js";
 import {
   criarFeedback,
   obterFeedbackTexto,
-  listarFeedbacksDetalhados,
+  listarFeedbacksDetalhados,   // precisa existir no controller
   responderFeedback,
-  listarMeusFeedbacks,
-  listarMinhasRespostas,
-  listarRespostasAnalista,
-  listarFeedbacksDoCliente,     // NOVA
-  listarRespostasDoCliente
+  listarFeedbacksDoCliente,
+  listarRespostasDoCliente,
 } from "../controllers/feedbackController.js";
 
 const router = Router();
 
-router.get("/me", checkRole(["CLIENTE"]), listarMeusFeedbacks);
-router.get("/me/respostas", checkRole(["CLIENTE"]), listarMinhasRespostas);
-router.get("/respostas", checkRole(["ANALISTA", "ADMIN"]), listarRespostasAnalista);
-/**
- * CLIENTE cria feedback
- */
-router.post("/", checkRole(["CLIENTE"]), criarFeedback);
+// todas as rotas abaixo exigem token
+router.use(checkAuth);
 
-router.get("/me", checkRole(["CLIENTE"]), listarFeedbacksDoCliente);           // NOVA
+// CLIENTE
+router.post("/", checkRole(["CLIENTE"]), criarFeedback);
+router.get("/me", checkRole(["CLIENTE"]), listarFeedbacksDoCliente);
 router.get("/me/respostas", checkRole(["CLIENTE"]), listarRespostasDoCliente);
 
-/**
- * ANALISTA/ADMIN lista feedbacks detalhados pela view + filtros
- * Ex.: GET /api/feedbacks/detalhados?id_produto=PRD-...&data_inicio=2025-11-01&data_fim=2025-11-30
- */
+// ANALISTA/ADMIN
 router.get("/detalhados", checkRole(["ANALISTA", "ADMIN"]), listarFeedbacksDetalhados);
-
-/**
- * Comentário completo em MongoDB
- */
 router.get("/:id_feedback/texto", checkRole(["ANALISTA", "ADMIN"]), obterFeedbackTexto);
 
-/**
- * ANALISTA responde um feedback
- */
+// ANALISTA
 router.post("/:id/respostas", checkRole(["ANALISTA"]), responderFeedback);
 
 export default router;
