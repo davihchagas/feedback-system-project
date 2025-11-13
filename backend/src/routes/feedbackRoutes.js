@@ -8,6 +8,8 @@ import {
   listarMeusFeedbacks,
   listarMinhasRespostas,
   listarRespostasAnalista,
+  listarFeedbacksDoCliente,     // NOVA
+  listarRespostasDoCliente
 } from "../controllers/feedbackController.js";
 
 const router = Router();
@@ -19,6 +21,9 @@ router.get("/respostas", checkRole(["ANALISTA", "ADMIN"]), listarRespostasAnalis
  * CLIENTE cria feedback
  */
 router.post("/", checkRole(["CLIENTE"]), criarFeedback);
+
+router.get("/me", checkRole(["CLIENTE"]), listarFeedbacksDoCliente);           // NOVA
+router.get("/me/respostas", checkRole(["CLIENTE"]), listarRespostasDoCliente);
 
 /**
  * ANALISTA/ADMIN lista feedbacks detalhados pela view + filtros

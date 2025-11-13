@@ -19,36 +19,30 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// rota simples para teste de saúde da API
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+// rota pública
+app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
-// rota de autenticação (sem JWT nem log)
+// rotas públicas (sem checkAuth)
 app.use("/auth", authRoutes);
 
-// rotas protegidas
+// a partir daqui, tudo precisa de token
+app.use(checkAuth);
+
 app.use("/api/produtos", produtoRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
 app.use("/api/relatorios", relatorioRoutes);
-
 app.use("/api/admin", adminRoutes);
 
 async function start() {
   try {
     await mysqlPool.getConnection();
     console.log("MySQL conectado");
-
     await connectMongo();
-
     const PORT = process.env.PORT || 4000;
-    app.listen(PORT, () => {
-      console.log(`API ouvindo na porta ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`API ouvindo na porta ${PORT}`));
   } catch (err) {
     console.error("Falha ao iniciar servidor", err);
     process.exit(1);
   }
 }
-
 start();

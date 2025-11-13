@@ -6,6 +6,67 @@ import { logAction } from "../utils/audit.js";
  * POST /api/feedbacks
  * Cria feedback para o cliente autenticado (mapeia USR -> CLI)
  */
+export async function listarFeedbacksDoCliente(req, res) {
+  try {
+    // 1) Ache o id_cliente pelo id_usuario do token
+    const [cliRows] = await mysqlPool.query(
+      "SELECT id_cliente FROM clientes WHERE id_usuario = ?",
+      [req.user.id_usuario]
+    );
+    if (cliRows.length === 0) {
+      return res.json([]); // sem vínculo cliente→usuario
+    }
+    const id_cliente = cliRows[0].id_cliente;
+
+    // 2) Liste os feedbacks desse cliente com nome do produto
+    const [rows] = await mysqlPool.query(
+      `SELECT f.id_feedback, f.id_produto, p.nome_produto,
+              f.nota, f.comentario_curto, f.data_feedback
+         FROM feedbacks f
+         JOIN produtos p ON p.id_produto = f.id_produto
+        WHERE f.id_cliente = ?
+        ORDER BY f.data_feedback DESC`,
+      [id_cliente]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: "Erro ao listar histórico do cliente" });
+  }
+}
+
+/** Respostas de feedback dirigidas ao cliente logado */
+export async function listarRespostasDoCliente(req, res) {
+  try {
+    // 1) id_cliente do usuário do token
+    const [cliRows] = await mysqlPool.query(
+      "SELECT id_cliente FROM clientes WHERE id_usuario = ?",
+      [req.user.id_usuario]
+    );
+    if (cliRows.length === 0) {
+      return res.json([]);
+    }
+    const id_cliente = cliRows[0].id_cliente;
+
+    // 2) Todas as respostas dos feedbacks desse cliente
+    const [rows] = await mysqlPool.query(
+      `SELECT r.id_resposta, r.id_feedback, r.texto_resposta, r.data_resposta,
+              u.nome AS nome_analista, p.nome_produto, f.nota, f.comentario_curto
+         FROM respostas_feedback r
+         JOIN feedbacks f           ON f.id_feedback = r.id_feedback
+         JOIN usuarios  u           ON u.id_usuario = r.id_usuario_analista
+         JOIN produtos  p           ON p.id_produto  = f.id_produto
+        WHERE f.id_cliente = ?
+        ORDER BY r.data_resposta DESC`,
+      [id_cliente]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: "Erro ao listar respostas do cliente" });
+  }
+}
+
 export async function criarFeedback(req, res) {
   try {
     const { id_cliente, id_produto, nota, comentario_curto, comentario_completo, tags = [] } = req.body;
